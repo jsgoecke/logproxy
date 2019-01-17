@@ -1,0 +1,70 @@
+# logproxy configuration
+
+# common server settings
+server:
+  # whether to enable debug logging
+  debug: true
+  # time (in seconds) for idle socket to be dropped
+  idleTimeoutSec: 60
+
+labels:
+  - name: location
+    value: somewhere
+
+# http server settings
+http:
+  name: myhttp
+  listen: 0.0.0.0:4999
+  telemetryPath: /metrics
+
+# input protocol handlers
+protocols:
+  - type: json
+    host: 0.0.0.0
+    port: 6801
+    enable: true
+
+  - type: log
+    host: 0.0.0.0
+    port: 6802
+    enable: true
+
+  - type: fluent
+    host: 0.0.0.0
+    port: 6803
+    enable: true
+
+  - type: syslog
+    host: 0.0.0.0
+    port: 6804
+    enable: true
+
+# list of output sinks
+# The first queue is always the default
+sinks:
+  # a stdout sink writes to stdout
+  # this is only useful for debugging.
+  - type: stdout
+    name: abc
+    size: 100
+    config:
+      raw: true
+
+  # write all records to a file. currently doesn't support file rotation.
+  - type: file
+    name: xyzzy
+    size: 10
+    config:
+      path: /tmp/mypubout
+
+  # Send all events to pubsub 
+  #- type: pubsub
+  #  name: prod
+  #  size: 500
+  #  config:
+  #    # name of topic on Google Pubsub
+  #    topicId: myqueue
+  #    # Authentication details
+  #    Auth:
+  #      # ProjectId on Google PubSub
+  #      ProjectId: my-project
