@@ -16,15 +16,15 @@ func TestLineTrim(t *testing.T) {
 
 func TestTrim(t *testing.T) {
 
-	buf_n := []byte{0, 'h', 'e', 'l', 'l', 'o', 0}
-	buf_nt := trim(buf_n, nullTrim)
-	assert.Equal(t, len(buf_nt), 5, "null trimmer")
-	assert.Equal(t, buf_nt[0], byte('h'), "null trimmer")
+	bufN := []byte{0, 'h', 'e', 'l', 'l', 'o', 0}
+	bufNt := trim(bufN, nullTrim)
+	assert.Equal(t, len(bufNt), 5, "null trimmer")
+	assert.Equal(t, bufNt[0], byte('h'), "null trimmer")
 
-	buf_nl := []byte{'\n', 'h', 'e', 'l', 'l', 'o', '\r', '\n'}
-	buf_nlt := trim(buf_nl, lineTrim)
-	assert.Equal(t, len(buf_nlt), 5, "null trimmer")
-	assert.Equal(t, buf_nlt[0], byte('h'), "null trimmer")
+	bufNl := []byte{'\n', 'h', 'e', 'l', 'l', 'o', '\r', '\n'}
+	bufNlt := trim(bufNl, lineTrim)
+	assert.Equal(t, len(bufNlt), 5, "null trimmer")
+	assert.Equal(t, bufNlt[0], byte('h'), "null trimmer")
 
 }
 
@@ -43,22 +43,22 @@ func TestSplitter(t *testing.T) {
 	assert.Equal(t, err, nil)
 
 	// data with line ending, EOF
-	adv, token, err = defaultSplitter(buf, true)
+	adv, _, err = defaultSplitter(buf, true)
 	assert.Equal(t, adv, 7, "splitter with newline and EOF ignores EOF")
 	assert.Equal(t, err, nil)
 
 	// no data, EOF
-	adv, token, err = defaultSplitter(make([]byte, 0, 0), true)
+	adv, _, err = defaultSplitter(make([]byte, 0, 0), true)
 	assert.Equal(t, adv, 0, "splitter atEOF with empty buf - no bytes")
 	assert.Equal(t, err, nil, "splitter atEOF with empty buf - no err")
 
 	// data with no line ending, EOF
-	adv, token, err = defaultSplitter(buf[8:], true)
+	adv, _, err = defaultSplitter(buf[8:], true)
 	assert.Equal(t, adv, 3, "splitter at EOF with bytes - len")
 	assert.Equal(t, err, nil, "splitter atEOF with empty buf - no err")
 
 	// data with no line ending, not eof
-	adv, token, err = defaultSplitter(buf[8:], false)
+	adv, _, err = defaultSplitter(buf[8:], false)
 	assert.Equal(t, adv, 0, "splitter no term, not eof")
 	assert.Equal(t, err, nil, "splitter no term, not eof")
 }

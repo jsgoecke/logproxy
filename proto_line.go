@@ -1,6 +1,6 @@
 package main
 
-// send all messages received to output terminated by newline
+// LogHandler sends all messages received to output terminated by newline
 type LogHandler struct {
 	log Logr
 	out OutputChannel

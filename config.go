@@ -27,19 +27,19 @@ func (l Label) String() string {
 }
 
 type ProtocolConfig struct {
-	Type     string
-	Enable   bool
-	Host     string
-	Port     int
-	HttpPath string
-	Config   map[string]interface{}
-	Name     string
+	Type      string
+	Enable    bool
+	Host      string
+	Port      int
+	HTTP_path string
+	Config    map[string]interface{}
+	Name      string
 }
 
 type HttpConfig struct {
-	Enable        bool
-	Listen        string
-	TelemetryPath string
+	Enable         bool
+	Listen         string
+	Telemetry_path string
 }
 
 type SinkConfig struct {
@@ -54,7 +54,11 @@ func (p ProtocolConfig) String() string {
 	if !p.Enable {
 		status = "(Disabled)"
 	}
-	return fmt.Sprintf("%v  Host:%s  Port:%d %s",
+	if p.HTTP_path != "" {
+		return fmt.Sprintf("%v HTTP Path:%s %s",
+			p.Type, p.HTTP_path, status)
+	}
+	return fmt.Sprintf("%v TCP Host:%s  Port:%d %s",
 		p.Type, p.Host, p.Port, status)
 }
 
@@ -66,9 +70,9 @@ type ServerConfig struct {
 	Server struct {
 		Debug bool `config:"debug"`
 		// time after which idle connection will be closed
-		IdleTimeoutSec int64 `config:"idleTimeoutSec"`
+		Idle_timeout_sec int64 `config:"idleTimeoutSec"`
 		// if non-zero, used to set tcp connection keep alive period
-		KeepAlivePeriod time.Duration `config:"keepAlivePeriod"`
+		Keep_alive_period time.Duration `config:"keepAlivePeriod"`
 	}
 
 	Http HttpConfig
@@ -84,11 +88,11 @@ type ServerConfig struct {
 func DefaultConfig() *ServerConfig {
 	cfg := new(ServerConfig)
 	cfg.Server.Debug = true
-	cfg.Server.IdleTimeoutSec = 60
-	cfg.Server.KeepAlivePeriod = 0
+	cfg.Server.Idle_timeout_sec = 60
+	cfg.Server.Keep_alive_period = 0
 	cfg.Http.Enable = true
 	cfg.Http.Listen = ":9201"
-	cfg.Http.TelemetryPath = "/metrics"
+	cfg.Http.Telemetry_path = "/metrics"
 	cfg.Sinks = make([]SinkConfig, 0, 0)
 
 	return cfg
@@ -103,7 +107,7 @@ func fileExists(path string) bool {
 }
 
 func getProtocolConfig(cfg *ServerConfig, name string) (p *ProtocolConfig, ok bool) {
-	for i, _ := range cfg.Protocols {
+	for i := range cfg.Protocols {
 		if string(cfg.Protocols[i].Type) == name {
 			return &cfg.Protocols[i], true
 		}
@@ -121,14 +125,13 @@ func ensureConfig(paths []string, cfg *SinkConfig) error {
 	return nil
 }
 
-/* LoadConfig - load configuration from config file,
-   environment variables, and command line.
-	 Environment and command line override file
-
-   The command line parameters protocol.enable and protocol.disable
-	 can be used to provide a comma-separated list of protocols
-	 that override the 'enable' flag in the yaml file.
-*/
+// LoadConfig loads configuration from config file,
+// environment variables, and command line.
+// Environment and command line override file
+//
+//   The command line parameters protocol.enable and protocol.disable
+//	 can be used to provide a comma-separated list of protocols
+//	 that override the 'enable' flag in the yaml file.
 func LoadConfig(ctx context.Context) (*ServerConfig, error) {
 
 	cfg := DefaultConfig()
@@ -155,10 +158,10 @@ func LoadConfig(ctx context.Context) (*ServerConfig, error) {
 		fmt.Printf("Config warning: %v\n", err)
 	}
 
-	if cfg.Server.KeepAlivePeriod < 0 {
+	if cfg.Server.Keep_alive_period < 0 {
 		return nil, errors.New("KeepAlivePeriod may not be negative")
 	}
-	if cfg.Server.IdleTimeoutSec <= 0 {
+	if cfg.Server.Idle_timeout_sec <= 0 {
 		return nil, errors.New("IdleTimeoutSec must be positive")
 	}
 

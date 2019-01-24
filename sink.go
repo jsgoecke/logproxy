@@ -1,9 +1,14 @@
 package main
 
-import "context"
+import (
+	"context"
 
+	"github.com/prometheus/client_golang/prometheus"
+)
+
+// OutputChannel represents an outgoing message queue
 type OutputChannel interface {
-	// pushes message to output queue
+	// Push adds message to output queue
 	Push(channel string, msg *PubMessage) error
 }
 
@@ -15,4 +20,38 @@ var sinkTypes = map[string]sinkRunner{
 	"pubsub": startPublisherSink,
 	"file":   startFileSink,
 	"stdout": startStdoutSink,
+}
+
+var (
+	// outBytes is a prometheus Counter metric that counts the number of bytes sent via pubsub
+	outBytes = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: metricPrefix + "out_bytes_total",
+			Help: "Number of bytes sent",
+		},
+		[]string{"sink", "topic"},
+	)
+
+	// outBytes is a prometheus Counter metric that counts the number of bytes sent via pubsub
+	outMsgs = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: metricPrefix + "out_messages_total",
+			Help: "Number of messages sent",
+		},
+		[]string{"sink", "topic"},
+	)
+	// outBytes is a prometheus Counter metric that counts the number of bytes sent via pubsub
+	outErrors = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: metricPrefix + "out_errors_total",
+			Help: "Number of errors sending",
+		},
+		[]string{"sink", "topic"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(outBytes)
+	prometheus.MustRegister(outMsgs)
+	prometheus.MustRegister(outErrors)
 }

@@ -8,28 +8,37 @@ import (
 	"os"
 	"reflect"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type IEvent interface{}
 type IEvents []IEvent
 
+// LogWriter wraps a writable stream handle for logging
 type LogWriter struct {
-	out      io.Writer
-	outBytes int64
+	out       io.Writer
+	outBytes  prometheus.Counter
+	outMsgs   prometheus.Counter
+	outErrors prometheus.Counter
 }
 
 func NewLogWriter(path string) (lw *LogWriter, err error) {
 
-	if fo, err := OpenOutputFile(path); err != nil {
+	fo, err := OpenOutputFile(path)
+	if err != nil {
 		return nil, err
-	} else {
-		lw := &LogWriter{
-			out: fo,
-		}
-		return lw, err
 	}
+	lw = &LogWriter{
+		out:       fo,
+		outBytes:  outBytes.WithLabelValues("file", "default"),
+		outMsgs:   outMsgs.WithLabelValues("file", "default"),
+		outErrors: outErrors.WithLabelValues("file", "default"),
+	}
+	return lw, nil
 }
 
+// OpenOutputFile opens the destination log file
 func OpenOutputFile(path string) (io.Writer, error) {
 
 	if path == "" {
@@ -44,6 +53,7 @@ func OpenOutputFile(path string) (io.Writer, error) {
 	return out, nil
 }
 
+// WriteEvent writes a single event to the output file
 func (lw *LogWriter) WriteEvent(e interface{}) error {
 	// first try binary
 	eb, ok := e.([]byte)
@@ -53,7 +63,8 @@ func (lw *LogWriter) WriteEvent(e interface{}) error {
 		if err != nil {
 			return NewConnectionError("Write failure", err, true)
 		}
-		lw.outBytes += int64(nb)
+		lw.outBytes.Add(float64(nb))
+		lw.outMsgs.Inc()
 		return nil
 	}
 
@@ -64,15 +75,18 @@ func (lw *LogWriter) WriteEvent(e interface{}) error {
 		if err != nil {
 			return NewConnectionError("Write failure", err, true)
 		}
-		lw.outBytes += int64(nb)
+		lw.outBytes.Add(float64(nb))
+		lw.outMsgs.Inc()
 		return nil
 	}
 
 	// otherwise give up
 	errMsg := fmt.Sprintf("Can't stringify event %v", reflect.TypeOf(e))
+	lw.outErrors.Inc()
 	return NewConnectionError("", errors.New(errMsg), false)
 }
 
+// WriteEvents sends an array of events to the output file
 func (lw *LogWriter) WriteEvents(events []interface{}) error {
 
 	for _, e := range events {
@@ -83,6 +97,9 @@ func (lw *LogWriter) WriteEvents(events []interface{}) error {
 	return nil
 }
 
+// Close closes the output stream if it has a Close method
+// This method does not return errors - any error during closing is ignored
+// so that we may proceed to cleanly close other connections
 func (lw *LogWriter) Close() {
 	if lw.out != nil {
 		if cl, ok := lw.out.(io.Closer); ok {
@@ -93,7 +110,7 @@ func (lw *LogWriter) Close() {
 
 func startFileSink(parentCtx context.Context, log Logr, recv <-chan PubMessage, cfg *SinkConfig) (shutdown func(), err error) {
 
-	if err := ensureConfig([]string{"path"}, cfg); err != nil {
+	if err = ensureConfig([]string{"path"}, cfg); err != nil {
 		return nil, err
 	}
 
@@ -102,6 +119,7 @@ func startFileSink(parentCtx context.Context, log Logr, recv <-chan PubMessage, 
 	if err != nil {
 		return nil, err
 	}
+	logWriter.outMsgs.Inc()
 	stopChan := make(chan bool)
 	go func() {
 		defer logWriter.Close()
@@ -112,7 +130,6 @@ func startFileSink(parentCtx context.Context, log Logr, recv <-chan PubMessage, 
 			case pubMsg, ok := <-recv:
 				if ok {
 					logWriter.WriteEvent(pubMsg.Data)
-					// TODO: update send metrics
 				} else {
 					// message channel closd, terminate loop
 					break

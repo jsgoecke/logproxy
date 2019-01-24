@@ -9,26 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var (
-	// outBytes is a prometheus Counter metric that counts the number of bytes sent via pubsub
-	outBytes = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: metricPrefix + "pubsub_sent_bytes_total",
-			Help: "Number of bytes sent",
-		},
-		[]string{"topic"},
-	)
-
-	// outBytes is a prometheus Counter metric that counts the number of bytes sent via pubsub
-	outMsgs = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: metricPrefix + "pubsub_sent_messages_total",
-			Help: "Number of messages sent",
-		},
-		[]string{"topic"},
-	)
-)
-
+// PubMessage defines an outgoing message for Google PubSub
 type PubMessage struct {
 
 	// Data is the data of the message
@@ -56,13 +37,14 @@ type PublishOptions struct {
 }
 
 type eventPublisher struct {
-	topicId  string
-	log      Logr
-	client   *pubsub.Client
-	topic    *pubsub.Topic
-	outBytes *prometheus.Counter
-	outMsgs  *prometheus.Counter
-	inChan   <-chan PubMessage
+	topicId   string
+	log       Logr
+	client    *pubsub.Client
+	topic     *pubsub.Topic
+	outBytes  prometheus.Counter
+	outMsgs   prometheus.Counter
+	outErrors prometheus.Counter
+	inChan    <-chan PubMessage
 }
 
 // initTopicPublisher creates authenticated pubsub client and ensures topic exists.
@@ -75,6 +57,9 @@ func initTopicPublisher(ctx context.Context, pub *eventPublisher, projectId stri
 	}
 	pub.client = client
 	pub.topic = client.Topic(pub.topicId)
+	pub.outBytes = outBytes.WithLabelValues("pubsub", pub.topicId)
+	pub.outMsgs = outMsgs.WithLabelValues("pubsub", pub.topicId)
+	pub.outErrors = outErrors.WithLabelValues("pubsub", pub.topicId)
 
 	if exists, err := pub.topic.Exists(ctx); exists {
 		// topic exists, return
@@ -109,7 +94,7 @@ func isString(s interface{}) bool {
 // shut down the publisher
 func startPublisherSink(parentCtx context.Context, log Logr, recv <-chan PubMessage, cfg *SinkConfig) (shutdown func(), err error) {
 
-	if err := ensureConfig([]string{"topicId", "auth.projectId"}, cfg); err != nil {
+	if err = ensureConfig([]string{"topicId", "auth.projectId"}, cfg); err != nil {
 		return nil, err
 	}
 
@@ -117,7 +102,6 @@ func startPublisherSink(parentCtx context.Context, log Logr, recv <-chan PubMess
 		topicId: getConfigString("topicId", cfg.Config),
 		log:     NewLogr(os.Stdout, nil),
 	}
-	//TODO: create counters for this topicId
 	//TODO: make the terminology between messages and events more consistent in this package
 
 	ctx, cancel := context.WithCancel(parentCtx)
@@ -127,7 +111,7 @@ func startPublisherSink(parentCtx context.Context, log Logr, recv <-chan PubMess
 	}
 
 	stopChan := make(chan bool)
-
+	log.Println("PUBSUB sink started!!")
 	go func() {
 		cleanup := func() {
 			// cleanup the context and stop topic goroutines
@@ -142,7 +126,6 @@ func startPublisherSink(parentCtx context.Context, log Logr, recv <-chan PubMess
 			case pubMsg, ok := <-recv:
 				if ok {
 					pub.send(ctx, pubMsg)
-					// TODO: update send metrics
 				} else {
 					// message channel closd, terminate loop
 					break
@@ -176,14 +159,18 @@ func (pub *eventPublisher) send(ctx context.Context, pubMsg PubMessage) error {
 
 	_, err := pub.topic.Publish(ctx, m).Get(ctx)
 	if err != nil {
-		// todo: increment errors
-
+		pub.outErrors.Inc()
 		// todo: what to do about errors?
 		// (a) disconnect, wait, and retry?
 		// (b) abort ?
 		// (c) ignore for up to n errors?
 		return err
 	}
+	// Increment stats counters.
+	// Bytes sent is length of Data byte array, i.e., serialized message
+	// Protocol overhead isn't measured here - that would be on network interface
+	pub.outMsgs.Inc()
+	pub.outBytes.Add(float64(len(pubMsg.Data)))
 	return nil
 
 }

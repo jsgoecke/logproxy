@@ -80,9 +80,8 @@ func asString(x interface{}) (tag string) {
 func asTimestamp(x interface{}) uint64 {
 	if xv, ok := x.(uint64); ok {
 		return xv
-	} else {
-		return 0
 	}
+	return 0
 }
 
 // buildRecord - create record Map from an array of values that represents

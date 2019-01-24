@@ -83,8 +83,8 @@ func NewTCPClient(ctx context.Context, cid uint32, pserver *ProtocolServer, conn
 	addr := conn.RemoteAddr().(*net.TCPAddr)
 	c.host = addr.IP.String()
 	c.port = addr.Port
-	c.ident = fmt.Sprintf("[%d] (%s) %s:%d",
-		c.cid, pserver.cfg.Type, addr.IP, addr.Port)
+	c.ident = fmt.Sprintf("[%d] %s (%s) %s:%d",
+		c.cid, pserver.cfg.Name, pserver.cfg.Type, addr.IP, addr.Port)
 
 	c.srv.log.Debugf("[%d] New connection: %s\n", c.cid, c.ident)
 	return c
@@ -149,7 +149,7 @@ func (c *Client) readLoop() {
 	if !c.srv.isRunning() || !c.isActive() {
 		return
 	}
-	debugf("[%d] Entering read loop\n", c.cid)
+	//debugf("[%d] Entering read loop\n", c.cid)
 
 	c.conn.SetDeadline(time.Now().Add(clientTimeout))
 

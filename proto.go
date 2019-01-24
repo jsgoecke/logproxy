@@ -93,26 +93,26 @@ var (
 	// inBytes is a prometheus Counter metric that counts the number of bytes received for each proto
 	inBytes = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: metricPrefix + "received_bytes_total",
+			Name: metricPrefix + "in_bytes_total",
 			Help: "Number of bytes received",
 		},
-		[]string{"proto"},
+		[]string{"pname"},
 	)
 	// inMsgs is a prometheus Counter metric that counts the number of messages received for each proto
 	inMsgs = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: metricPrefix + "received_messages_total",
+			Name: metricPrefix + "in_messages_total",
 			Help: "Number of messages received",
 		},
-		[]string{"proto"},
+		[]string{"pname"},
 	)
 	// inErrors is a prometheus Counter metric that counts the number of errors encountered processing proto streams
 	inErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: metricPrefix + "errors",
+			Name: metricPrefix + "in_errors",
 			Help: "Number of connection or protocol errors",
 		},
-		[]string{"proto"},
+		[]string{"pname"},
 	)
 )
 
@@ -124,12 +124,12 @@ func init() {
 
 // isTCP - returns true if this protocol server has a TCP listener
 func (pserver *ProtocolServer) isTCP() bool {
-	return pserver.cfg.Host != "" && pserver.cfg.Port != 0
+	return !pserver.isHTTP() && pserver.cfg.Host != "" && pserver.cfg.Port != 0
 }
 
 // isHTTP - returns true if this protocol server has an http handler
 func (pserver *ProtocolServer) isHTTP() bool {
-	return pserver.cfg.HttpPath != ""
+	return pserver.cfg.HTTP_path != ""
 }
 
 func (pserver *ProtocolServer) numConnections() int {
@@ -154,9 +154,8 @@ func (pserver *ProtocolServer) listClients() []*Client {
 			clients = append(clients, c)
 		}
 		return clients
-	} else {
-		return make([]*Client, 0, 0)
 	}
+	return make([]*Client, 0, 0)
 }
 
 // serve is a goroutine for handling all connections. Returns when server shuts down.
@@ -170,7 +169,7 @@ func (pserver *ProtocolServer) serve(ctx context.Context) {
 	protoCtx, cancel := context.WithCancel(ctx)
 	defer func() {
 		if pserver.listener != nil {
-			s.log.Debugf("Proto listener (%v, port %d) exiting\n", cfg.Type, cfg.Port)
+			s.log.Printf("Stopping %v\n", cfg)
 			pserver.listener.Close()
 			pserver.listener = nil
 		}
@@ -183,7 +182,7 @@ func (pserver *ProtocolServer) serve(ctx context.Context) {
 		cancel()
 	}()
 
-	s.log.Printf("Starting protocol handler %v\n", cfg.Type)
+	s.log.Printf("Starting %v\n", cfg)
 
 	for s.isRunning() {
 		select {
@@ -197,11 +196,11 @@ func (pserver *ProtocolServer) serve(ctx context.Context) {
 		pserver.listener.SetDeadline(time.Now().Add(250 * time.Millisecond))
 		conn, err := pserver.listener.AcceptTCP()
 		if err == nil {
-			s.log.Debug("Got new connection")
+			// s.log.Debug("Got new connection")
 			conn.SetNoDelay(true)
 			conn.SetKeepAlive(true)
-			if s.cfg.Server.KeepAlivePeriod > 0 {
-				conn.SetKeepAlivePeriod(s.cfg.Server.KeepAlivePeriod * time.Second)
+			if s.cfg.Server.Keep_alive_period > 0 {
+				conn.SetKeepAlivePeriod(s.cfg.Server.Keep_alive_period * time.Second)
 			}
 
 			pserver.mu.Lock()
@@ -211,10 +210,10 @@ func (pserver *ProtocolServer) serve(ctx context.Context) {
 
 			client := NewTCPClient(protoCtx, cid, pserver, conn)
 
-			//pserver.mu.Lock()
+			pserver.mu.Lock()
 			pserver.clients[cid] = client
-			//pserver.mu.Unlock()
-			s.log.Debugf("entering client read loop for %s\n", pserver.cfg.Type)
+			pserver.mu.Unlock()
+			//s.log.Debugf("entering client read loop for %s\n", pserver.cfg.Type)
 
 			go client.readLoop()
 		}
@@ -226,25 +225,37 @@ func NewProtocolServer(s *Server, out OutputChannel, cfg *ProtocolConfig) (pserv
 
 	newHandlerFunc, ok := protocolTypes[cfg.Type]
 	if !ok {
-		return nil, errors.New(fmt.Sprintf("Invalid protocol type %s\n", cfg.Type))
+		return nil, fmt.Errorf("Invalid protocol type %s", cfg.Type)
 	}
 
 	var listener *net.TCPListener
 
-	if cfg.Host != "" && cfg.Port != 0 {
-		ip := net.ParseIP(cfg.Host)
-		if ip == nil {
-			msg := fmt.Sprintf("Invalid IP host %s for service %s", cfg.Host, cfg.Type)
-			return nil, errors.New(msg)
+	// if not an http server, Host and Port must be defined
+	if cfg.HTTP_path == "" {
+		if cfg.Host != "" && cfg.Port != 0 {
+			ip := net.ParseIP(cfg.Host)
+			if ip == nil {
+				msg := fmt.Sprintf("Invalid IP host %s for service %s", cfg.Host, cfg.Type)
+				return nil, errors.New(msg)
+			}
+			tcpAddr := net.TCPAddr{
+				IP:   ip,
+				Port: cfg.Port,
+			}
+			listener, err = net.ListenTCP("tcp", &tcpAddr)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, fmt.Errorf("Missing host or port config for %s", cfg.Type)
 		}
-		tcpAddr := net.TCPAddr{
-			IP:   ip,
-			Port: cfg.Port,
-		}
-		listener, err = net.ListenTCP("tcp", &tcpAddr)
-		if err != nil {
-			return nil, err
-		}
+	}
+
+	statLabel := cfg.Type
+	// allow Name to override Type, in case there is more than
+	// one handler per proto
+	if cfg.Name != "" {
+		statLabel = cfg.Name
 	}
 
 	pserver = &ProtocolServer{
@@ -253,9 +264,9 @@ func NewProtocolServer(s *Server, out OutputChannel, cfg *ProtocolConfig) (pserv
 		listener: listener,
 		handler:  newHandlerFunc(s.log, out, cfg),
 		clients:  make(map[uint32]*Client),
-		inBytes:  inBytes.WithLabelValues(cfg.Type),
-		inMsgs:   inMsgs.WithLabelValues(cfg.Type),
-		inErrors: inErrors.WithLabelValues(cfg.Type),
+		inBytes:  inBytes.WithLabelValues(statLabel),
+		inMsgs:   inMsgs.WithLabelValues(statLabel),
+		inErrors: inErrors.WithLabelValues(statLabel),
 	}
 
 	return pserver, nil

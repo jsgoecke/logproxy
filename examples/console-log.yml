@@ -1,0 +1,59 @@
+# logproxy configuration
+
+# the most basic logproxy configuration
+# accept all input types, and log json to console (stdout)
+
+server:
+  debug: true
+  # time (in seconds) for idle socket to be dropped
+  idle_timeout_sec: 60
+
+# http server settings
+# required if either you are using prometheus to scrape the metrics endpoint
+# or if some inputs come over http instead of raw tcp
+http:
+  name: myhttp
+  listen: 0.0.0.0:4999
+  telemetry_path: /metrics
+
+# input protocol handlers
+protocols:
+  # accepts json via HTTP POST at http://HOST:4999/json
+  - type: json
+    name: json_http
+    enable: true
+    http_path: /json
+
+  # accept json via TCP on port 6801
+  - type: json
+    name: json_tcp
+    enable: true
+    host: 0.0.0.0
+    port: 6801
+
+  - type: log
+    host: 0.0.0.0
+    port: 6802
+    enable: true
+    xyz: 456
+
+  - type: fluent
+    host: 0.0.0.0
+    port: 6803
+    enable: true
+    xyz: 789
+
+  - type: syslog
+    host: 0.0.0.0
+    port: 6804
+    enable: true
+
+# list of output sinks
+# The first queue is always the default
+sinks:
+  # a stdout sink writes to stdout
+  - type: stdout
+    name: console
+    size: 100
+    config:
+      raw: true

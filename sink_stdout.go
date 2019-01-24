@@ -17,6 +17,10 @@ func startStdoutSink(parentCtx context.Context, log Logr, recv <-chan PubMessage
 		}
 	}
 
+	outBytes := outBytes.WithLabelValues("stdout", "default")
+	outMsgs := outMsgs.WithLabelValues("stdout", "default")
+	//outErrors := outErrors.WithLabelValues("stdout", "default")
+
 	stopChan := make(chan bool)
 	go func() {
 		for {
@@ -24,9 +28,13 @@ func startStdoutSink(parentCtx context.Context, log Logr, recv <-chan PubMessage
 			case pubMsg, _ := <-recv:
 				if rawFmt {
 					os.Stdout.Write(pubMsg.Data)
+					outMsgs.Add(float64(len(pubMsg.Data)))
 				} else {
-					os.Stdout.Write([]byte(string(pubMsg.Data)))
+					bdata := []byte(string(pubMsg.Data))
+					os.Stdout.Write(bdata)
+					outMsgs.Add(float64(len(bdata)))
 				}
+				outBytes.Inc()
 			case <-stopChan:
 				break
 			default:

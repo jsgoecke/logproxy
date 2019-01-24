@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -63,7 +62,7 @@ type ServerStatus int64
 const (
 	// Running - server is running and listening for new connections
 	Running = ServerStatus(iota + 1)
-	// Shutting down - no new connections will be accepted
+	// ShuttingDown - no new connections will be accepted
 	ShuttingDown
 )
 
@@ -98,6 +97,7 @@ func (s *Server) enabledProtocols() []string {
 	return names
 }
 
+// NewServer constructs the Server instance (but does not start it)
 func NewServer(cfg *ServerConfig) *Server {
 
 	now := time.Now()
@@ -119,7 +119,7 @@ func (s *Server) setupSinks(ctx context.Context) error {
 
 		startSinkFn, ok := sinkTypes[cfg.Type]
 		if !ok {
-			return errors.New(fmt.Sprintf("Unsupported sink type %s\n", cfg.Type))
+			return fmt.Errorf("Unsupported sink type %s", cfg.Type)
 		}
 		if cfg.Name == "" || cfg.Size == 0 {
 			return errors.New("Sink configuration requires Type, Name, and Size")
@@ -131,10 +131,8 @@ func (s *Server) setupSinks(ctx context.Context) error {
 		if _ /*cancelFn*/, err := startSinkFn(ctx, s.log, mq.Queue, &cfg); err != nil {
 			close(mq.Queue)
 			return err
-		} else {
-			s.queues = append(s.queues, mq)
-			//s.cancelers = append(s.cancelers, cancelFn)
 		}
+		s.queues = append(s.queues, mq)
 	}
 
 	if len(s.queues) == 0 {
@@ -160,7 +158,7 @@ func (s *Server) Push(name string, msg *PubMessage) error {
 	}
 	if mq == nil {
 		// this should probably be a panic ...
-		return errors.New(fmt.Sprintf("Invalid queue: %s", name))
+		return fmt.Errorf("Invalid queue: %s", name)
 	}
 	mq.Queue <- *msg
 	return nil
@@ -188,6 +186,7 @@ func (s *Server) start(parentCtx context.Context) error {
 		cfg := &s.cfg.Protocols[i]
 		if cfg.Enable {
 			// check that it's a valid protocol and create chunk handler
+			// the server is also the output channel (second param)
 			pserver, err := NewProtocolServer(s, s, cfg)
 			if err != nil {
 				// failure to start any protocol server is fatal
@@ -199,12 +198,13 @@ func (s *Server) start(parentCtx context.Context) error {
 
 			if pserver.isHTTP() {
 				if !serverHttpEnabled {
-					msg := fmt.Sprintf(`Config Error: HttpPath listed for %s but Http server is enabled.\n`+
+					msg := fmt.Sprintf(`Config Error: HTTPPath listed for %s but Http server is not enabled.\n`+
 						`Http.Enabled should be true and Http.Listen contains "host:port"\n`, cfg.Type)
 					return errors.New(msg)
 				}
-				http.HandleFunc(cfg.HttpPath, protoHandler(pserver))
-				s.log.Printf("Http listener %s at %s\n", cfg.Type, cfg.HttpPath)
+				http.HandleFunc(cfg.HTTP_path, protoHandler(pserver))
+				s.log.Printf("HTTP listener %s at %s\n",
+					cfg.Type, cfg.HTTP_path)
 				httpHandlers++
 			}
 			if pserver.isTCP() {
@@ -214,12 +214,13 @@ func (s *Server) start(parentCtx context.Context) error {
 	}
 
 	if serverHttpEnabled {
-		if s.cfg.Http.TelemetryPath != "" {
+		if s.cfg.Http.Telemetry_path != "" {
 			var opts promhttp.HandlerOpts
 			reg := prometheus.DefaultGatherer
 			opts.ErrorLog = s.log
-			http.Handle(s.cfg.Http.TelemetryPath, promhttp.HandlerFor(reg, opts))
-			s.log.Printf("Http listener telemetry at %s\n", s.cfg.Http.TelemetryPath)
+			http.Handle(s.cfg.Http.Telemetry_path, promhttp.HandlerFor(reg, opts))
+			s.log.Printf("Http listener telemetry at %s %s\n",
+				s.cfg.Http.Listen, s.cfg.Http.Telemetry_path)
 			httpHandlers++
 		}
 		if httpHandlers > 0 {
