@@ -78,12 +78,10 @@ type Server struct {
 	log        Logr
 	httpServer *http.Server
 	status     ServerStatus
-	//ctx        context.Context
-	cancel   context.CancelFunc
-	mu       sync.Mutex
-	pservers []*ProtocolServer
-	queues   []*MessageQueue
-	//cancelers []func()
+	cancel     context.CancelFunc
+	mu         sync.Mutex
+	pservers   []*ProtocolServer
+	queues     []*MessageQueue
 }
 
 func (s *Server) enabledProtocols() []string {

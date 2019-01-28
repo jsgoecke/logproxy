@@ -114,3 +114,15 @@ func getConfigVal(path string, cfg map[string]interface{}) interface{} {
 	}
 	return nil
 }
+
+// isString returns true if the parameter is a non-empty string
+func isString(s interface{}) bool {
+	if s != nil {
+		if str, ok := s.(string); ok {
+			if str != "" {
+				return true
+			}
+		}
+	}
+	return false
+}

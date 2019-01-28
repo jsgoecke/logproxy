@@ -26,8 +26,8 @@ type ChunkResult struct {
 //
 // The interface is designed to be independendent of the
 // transport protocol, and can be invoked
-// for bytes received on a TCP connection
-// (a Client instance) or to process the body
+// for bytes received from either a TCP connection
+// (a Client instance) or as the body
 // of an HTTP post (by httpsever.go)
 type ProtocolHandler interface {
 

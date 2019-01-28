@@ -50,16 +50,26 @@ sinks:
     config:
       raw: true
 
+  - type: redis
+    name: redis
+    size: 100
+    config:
+      topicId: myqueue
+      url: redis://127.0.0.1:6379/1
+      # redis://:qwerty@localhost:6379/1"
+
   # write all records to a file. currently doesn't support file rotation.
   - type: file
     name: xyzzy
     size: 10
+    enable: false
     config:
       path: /tmp/mypubout
 
-  # Send all events to pubsub 
+  # Send all events to pubsub
   #- type: pubsub
   #  name: prod
+  #  enable: false
   #  size: 500
   #  config:
   #    # name of topic on Google Pubsub

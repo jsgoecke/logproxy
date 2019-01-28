@@ -9,16 +9,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// PubMessage defines an outgoing message for Google PubSub
-type PubMessage struct {
-
-	// Data is the data of the message
-	Data []byte
-
-	// Attributes are additional labels as string key-value pairs
-	Attributes map[string]string
-}
-
 // PublishOptions provide options for the Google PubSub publisher
 type PublishOptions struct {
 
@@ -36,7 +26,7 @@ type PublishOptions struct {
 	msgQ <-chan PubMessage
 }
 
-type eventPublisher struct {
+type gpubsubPublisher struct {
 	topicId   string
 	log       Logr
 	client    *pubsub.Client
@@ -49,7 +39,7 @@ type eventPublisher struct {
 
 // initTopicPublisher creates authenticated pubsub client and ensures topic exists.
 // returns error if there were problems or nil if client and topic are ready for publishing
-func initTopicPublisher(ctx context.Context, pub *eventPublisher, projectId string) error {
+func initTopicPublisher(ctx context.Context, pub *gpubsubPublisher, projectId string) error {
 
 	client, err := pubsub.NewClient(ctx, projectId)
 	if err != nil {
@@ -76,29 +66,17 @@ func initTopicPublisher(ctx context.Context, pub *eventPublisher, projectId stri
 	return nil
 }
 
-// isString returns true if the parameter is a non-empty string
-func isString(s interface{}) bool {
-	if s != nil {
-		if str, ok := s.(string); ok {
-			if str != "" {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // startPublisher creates the connection to Google Pubsub
 // and launches the loop to process incoming messages.
 // If successful, returns a shutdown function that can be called to
 // shut down the publisher
-func startPublisherSink(parentCtx context.Context, log Logr, recv <-chan PubMessage, cfg *SinkConfig) (shutdown func(), err error) {
+func startPubsubSink(parentCtx context.Context, log Logr, recv <-chan PubMessage, cfg *SinkConfig) (shutdown func(), err error) {
 
 	if err = ensureConfig([]string{"topicId", "auth.projectId"}, cfg); err != nil {
 		return nil, err
 	}
 
-	pub := &eventPublisher{
+	pub := &gpubsubPublisher{
 		topicId: getConfigString("topicId", cfg.Config),
 		log:     NewLogr(os.Stdout, nil),
 	}
@@ -150,7 +128,7 @@ func startPublisherSink(parentCtx context.Context, log Logr, recv <-chan PubMess
 	return stopFunc, nil
 }
 
-func (pub *eventPublisher) send(ctx context.Context, pubMsg PubMessage) error {
+func (pub *gpubsubPublisher) send(ctx context.Context, pubMsg PubMessage) error {
 
 	m := &pubsub.Message{
 		Data:       pubMsg.Data,
@@ -166,6 +144,7 @@ func (pub *eventPublisher) send(ctx context.Context, pubMsg PubMessage) error {
 		// (c) ignore for up to n errors?
 		return err
 	}
+
 	// Increment stats counters.
 	// Bytes sent is length of Data byte array, i.e., serialized message
 	// Protocol overhead isn't measured here - that would be on network interface

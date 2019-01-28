@@ -6,6 +6,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// PubMessage defines an outgoing message
+type PubMessage struct {
+
+	// Data is the data of the message
+	Data []byte
+
+	// Attributes are additional labels as string key-value pairs
+	Attributes map[string]string
+}
+
 // OutputChannel represents an outgoing message queue
 type OutputChannel interface {
 	// Push adds message to output queue
@@ -17,13 +27,14 @@ type sinkRunner func(parentCtx context.Context, log Logr, recv <-chan PubMessage
 
 // supported types of output
 var sinkTypes = map[string]sinkRunner{
-	"pubsub": startPublisherSink,
+	"pubsub": startPubsubSink,
+	"redis":  startRedisSink,
 	"file":   startFileSink,
 	"stdout": startStdoutSink,
 }
 
 var (
-	// outBytes is a prometheus Counter metric that counts the number of bytes sent via pubsub
+	// outBytes is a prometheus Counter metric that counts the number of bytes sent
 	outBytes = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: metricPrefix + "out_bytes_total",
@@ -32,7 +43,7 @@ var (
 		[]string{"sink", "topic"},
 	)
 
-	// outBytes is a prometheus Counter metric that counts the number of bytes sent via pubsub
+	// outMsgs is a prometheus Counter metric that counts the number of messages sent
 	outMsgs = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: metricPrefix + "out_messages_total",
@@ -40,7 +51,10 @@ var (
 		},
 		[]string{"sink", "topic"},
 	)
-	// outBytes is a prometheus Counter metric that counts the number of bytes sent via pubsub
+
+	// outErrors is a prometheus Counter metric that counts the number of errors
+	// encountered - either from network io (e.g., socket timeouts) or
+	// protocol errors (such as invalid json)
 	outErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: metricPrefix + "out_errors_total",

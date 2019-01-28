@@ -41,9 +41,9 @@ func (s ConnectionStatus) String() string {
 // This class is used by all TCP protocols. (see proto.go)
 //
 // Message handling is performed asynchronously. Whenever bytes are received
-// on a connection, the protocol handler is called detemine whether a complete
-// message has been received. When a received message is complete, it is passed
-// asynchronously to an output handler.
+// on a connection, the protocol handler parses the buffer to determine
+// if there is at least one complete message received.
+// Each received message is passed asynchronously to an output handler.
 // As currently implemented, none of the protocols provide any response or
 // acknowledgement to the TCP client, other than TCP ACK.
 type Client struct {
