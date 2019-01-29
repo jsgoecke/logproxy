@@ -53,11 +53,12 @@ type protocolConstructor func(log Logr, out OutputChannel, pcfg *ProtocolConfig)
 // protocolTypes is the list of input protocol names and constructor functions.
 // The string name is used in the "Type" field of config.yaml.
 var protocolTypes = map[string]protocolConstructor{
-	"log":        NewLogHandler,
-	"json":       NewJsonHandler,
-	"syslog":     NewSyslogRelpHandler,
-	"fluent":     NewFluentForwardReader,
-	"prometheus": NewPromRemoteHandler,
+	"log":        newLogHandler,
+	"eventp":     newEventHandler,
+	"json":       newJsonHandler,
+	"syslog":     newSyslogRelpHandler,
+	"fluent":     newFluentForwardReader,
+	"prometheus": newPromRemoteHandler,
 }
 
 // isProtocolType returns true if the parameter is the name of a supported protocol

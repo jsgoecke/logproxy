@@ -24,19 +24,24 @@ protocols:
     port: 6801
     enable: true
 
-  - type: log
+  - type: eventp
     host: 0.0.0.0
     port: 6802
     enable: true
 
-  - type: fluent
+  - type: log
     host: 0.0.0.0
     port: 6803
     enable: true
 
-  - type: syslog
+  - type: fluent
     host: 0.0.0.0
     port: 6804
+    enable: true
+
+  - type: syslog
+    host: 0.0.0.0
+    port: 6805
     enable: true
 
 # list of output sinks
@@ -54,9 +59,13 @@ sinks:
     name: redis
     size: 100
     config:
+      # default topic
       topicId: myqueue
       url: redis://127.0.0.1:6379/1
-      # redis://:qwerty@localhost:6379/1"
+      topics:
+        # custom topics depending on Attribute.content field
+        - content: Event
+          topic: events
 
   # write all records to a file. currently doesn't support file rotation.
   - type: file

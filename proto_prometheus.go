@@ -1,26 +1,26 @@
 package main
 
 import (
+	"github.com/davecgh/go-spew/spew"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/prompb"
-	//"github.com/davecgh/go-spew/spew"
 )
 
 /*
 PromRemoteHandler handles Prometheus remote write protocol
 */
-type PromRemoteHandler struct {
+type promRemoteHandler struct {
 	log Logr
 	out OutputChannel
 }
 
-func NewPromRemoteHandler(log Logr, out OutputChannel, _ *ProtocolConfig) ProtocolHandler {
-	return &PromRemoteHandler{log: log, out: out}
+func newPromRemoteHandler(log Logr, out OutputChannel, _ *ProtocolConfig) ProtocolHandler {
+	return &promRemoteHandler{log: log, out: out}
 }
 
-func (h *PromRemoteHandler) ProcessChunk(data []byte, atEOF bool) (*ChunkResult, error) {
+func (h *promRemoteHandler) ProcessChunk(data []byte, atEOF bool) (*ChunkResult, error) {
 
 	reqBuf, err := snappy.Decode(nil, data)
 	if err != nil {
@@ -35,6 +35,7 @@ func (h *PromRemoteHandler) ProcessChunk(data []byte, atEOF bool) (*ChunkResult,
 	}
 
 	events := protoToSamples(&req)
+	h.log.Debugf("\n\nVERBOSE Samples\n%s\n", spew.Sdump(events))
 	result := &ChunkResult{
 		bytesRead: uint32(len(data)),
 		msgsRead:  uint32(len(events)),

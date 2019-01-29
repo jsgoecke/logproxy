@@ -18,15 +18,15 @@ type MTypeCount struct {
 	unk int64
 }
 
-type FluentForwardReader struct {
+type fluentForwardReader struct {
 	log      Logr
 	out      OutputChannel
 	counters MTypeCount
 	mh       codec.MsgpackHandle
 }
 
-func NewFluentForwardReader(log Logr, out OutputChannel, _ *ProtocolConfig) ProtocolHandler {
-	ffr := &FluentForwardReader{log: log, out: out}
+func newFluentForwardReader(log Logr, out OutputChannel, _ *ProtocolConfig) ProtocolHandler {
+	ffr := &fluentForwardReader{log: log, out: out}
 	ffr.mh.RawToString = false
 	return ffr
 }
@@ -181,7 +181,7 @@ func handleFluentMessage(fm *FluentMessage) (numMsgs uint32) {
 	return count
 }
 
-func (ffr *FluentForwardReader) ProcessChunk(data []byte, atEOF bool) (*ChunkResult, error) {
+func (ffr *fluentForwardReader) ProcessChunk(data []byte, atEOF bool) (*ChunkResult, error) {
 
 	var (
 		msgX   []interface{}
@@ -202,7 +202,11 @@ func (ffr *FluentForwardReader) ProcessChunk(data []byte, atEOF bool) (*ChunkRes
 	}
 	nb := dec.NumBytesRead()
 	if pushBinary {
-		pubmsg := &PubMessage{Data: data[:nb]}
+		pubmsg := &PubMessage{
+			Data:       data[:nb],
+			Attributes: make(map[string]string),
+			//Attributes: map[string]string{"content": "", "fmt": ""},
+		}
 		ffr.out.Push(defaultQueue, pubmsg)
 		result = &ChunkResult{
 			bytesRead: uint32(nb),

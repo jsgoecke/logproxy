@@ -9,13 +9,13 @@ const (
 	maxDataLen   = maxBufferSize - maxHeaderLen - 1
 )
 
-type SyslogRelpHandler struct {
+type syslogRelpHandler struct {
 	log Logr
 	out OutputChannel
 }
 
-func NewSyslogRelpHandler(log Logr, out OutputChannel, _ *ProtocolConfig) ProtocolHandler {
-	return &SyslogRelpHandler{log: log, out: out}
+func newSyslogRelpHandler(log Logr, out OutputChannel, _ *ProtocolConfig) ProtocolHandler {
+	return &syslogRelpHandler{log: log, out: out}
 }
 
 // Parse int from byte slice. returns value and ok=true if all bytes are digits.
@@ -52,7 +52,7 @@ func tokenAscii(data []byte, delimiter byte, count int, maxParse int) []int {
 	return marks
 }
 
-func (h *SyslogRelpHandler) ProcessChunk(data []byte, atEOF bool) (*ChunkResult, error) {
+func (h *syslogRelpHandler) ProcessChunk(data []byte, atEOF bool) (*ChunkResult, error) {
 
 	result := &ChunkResult{}
 
@@ -80,7 +80,10 @@ func (h *SyslogRelpHandler) ProcessChunk(data []byte, atEOF bool) (*ChunkResult,
 				result.msgsRead = uint32(1)
 				body := data[headerLen : headerLen+dataLen]
 
-				pm := &PubMessage{Data: body}
+				pm := &PubMessage{
+					Data:       body,
+					Attributes: map[string]string{"content": "syslog", "fmt": "text"},
+				}
 				h.out.Push(defaultQueue, pm)
 
 				// this won't look great if the syslog message is not a simple string,

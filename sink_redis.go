@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"time"
 
@@ -13,7 +15,7 @@ import (
 // redisPubOptions provide options for the Google PubSub publisher
 type redisPubOptions struct {
 
-	// topicId is the PubSub topicId. Must be a valid Google PubSub topic name
+	// topicId is the PubSub topicId.
 	topicId string
 
 	// logging interface
@@ -24,6 +26,10 @@ type redisPubOptions struct {
 	msgQ <-chan PubMessage
 }
 
+type topicMap map[string]string
+
+// specific publish topics by content
+
 type redisPublisher struct {
 	topicId   string
 	log       Logr
@@ -32,6 +38,41 @@ type redisPublisher struct {
 	outMsgs   prometheus.Counter
 	outErrors prometheus.Counter
 	inChan    <-chan PubMessage
+	channels  topicMap
+}
+
+type topicConfig []map[string]string
+
+func getChannelTopics(cfg *SinkConfig, log Logr) (topicMap, error) {
+
+	cfgError := false
+	topics := make(topicMap)
+
+	if topicCfg := getConfigVal("topics", cfg.Config); topicCfg != nil {
+		if tlist, ok2 := topicCfg.([]interface{}); ok2 {
+			for _, topicDef := range tlist {
+				tm, _ := topicDef.(map[interface{}]interface{})
+				content := tm["content"]
+				topic := tm["topic"]
+				if content != nil && topic != nil {
+					topics[content.(string)] = topic.(string)
+					log.Printf("Sink %s will route content '%s' to topic '%s'\n",
+						cfg.Name, content, topic)
+				} else {
+					cfgError = true
+					break
+				}
+			}
+		} else {
+			cfgError = true
+		}
+	}
+	if cfgError {
+		errmsg := fmt.Sprintf("invalid config value for 'topics' in sink %s. "+
+			"Should be list of maps each containing (content:, topic:)", cfg.Name)
+		return nil, errors.New(errmsg)
+	}
+	return topics, nil
 }
 
 // startRedisPubSink creates the connection to Google Pubsub
@@ -54,6 +95,11 @@ func startRedisSink(parentCtx context.Context, log Logr, recv <-chan PubMessage,
 		return nil, err
 	}
 
+	topics, err := getChannelTopics(cfg, log)
+	if err != nil {
+		return nil, err
+	}
+
 	pub := &redisPublisher{
 		client:    redis.NewClient(opts),
 		topicId:   topicId,
@@ -61,12 +107,11 @@ func startRedisSink(parentCtx context.Context, log Logr, recv <-chan PubMessage,
 		outBytes:  outBytes.WithLabelValues("redis", topicId),
 		outMsgs:   outMsgs.WithLabelValues("redis", topicId),
 		outErrors: outErrors.WithLabelValues("redis", topicId),
+		channels:  topics,
 	}
 
-	ctx, cancel := context.WithCancel(parentCtx)
-
 	stopChan := make(chan bool)
-	log.Println("Redis publisher sink started!!")
+	ctx, cancel := context.WithCancel(parentCtx)
 	go func() {
 		cleanup := func() {
 			// cleanup the context and stop topic goroutines
@@ -77,6 +122,7 @@ func startRedisSink(parentCtx context.Context, log Logr, recv <-chan PubMessage,
 			})
 		}
 		defer cleanup()
+		log.Println("Redis publisher sink started!!")
 
 		for {
 			select {

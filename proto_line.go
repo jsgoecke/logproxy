@@ -1,16 +1,16 @@
 package main
 
 // LogHandler sends all messages received to output terminated by newline
-type LogHandler struct {
+type logHandler struct {
 	log Logr
 	out OutputChannel
 }
 
-func NewLogHandler(log Logr, out OutputChannel, pc *ProtocolConfig) ProtocolHandler {
-	return &LogHandler{log: log, out: out}
+func newLogHandler(log Logr, out OutputChannel, pc *ProtocolConfig) ProtocolHandler {
+	return &logHandler{log: log, out: out}
 }
 
-func (h *LogHandler) ProcessChunk(data []byte, atEOF bool) (*ChunkResult, error) {
+func (h *logHandler) ProcessChunk(data []byte, atEOF bool) (*ChunkResult, error) {
 
 	result := &ChunkResult{}
 	bytesRead, msg, err := defaultSplitter(data, atEOF)
@@ -22,7 +22,10 @@ func (h *LogHandler) ProcessChunk(data []byte, atEOF bool) (*ChunkResult, error)
 		result.bytesRead = uint32(bytesRead)
 		msg = trim(msg, lineTrim)
 		if len(msg) > 0 {
-			pm := &PubMessage{Data: msg}
+			pm := &PubMessage{
+				Data:       msg,
+				Attributes: map[string]string{"fmt": "text"},
+			}
 			h.out.Push(defaultQueue, pm)
 			result.msgsRead = 1
 		}

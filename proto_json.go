@@ -3,16 +3,16 @@ package main
 //"fmt"
 //"github.com/davecgh/go-spew/spew"
 
-type JsonHandler struct {
+type jsonHandler struct {
 	log Logr
 	out OutputChannel
 }
 
-func NewJsonHandler(log Logr, out OutputChannel, _ *ProtocolConfig) ProtocolHandler {
-	return &JsonHandler{log: log, out: out}
+func newJsonHandler(log Logr, out OutputChannel, _ *ProtocolConfig) ProtocolHandler {
+	return &jsonHandler{log: log, out: out}
 }
 
-func (h *JsonHandler) ProcessChunk(data []byte, atEOF bool) (*ChunkResult, error) {
+func (h *jsonHandler) ProcessChunk(data []byte, atEOF bool) (*ChunkResult, error) {
 
 	result := &ChunkResult{}
 
@@ -28,7 +28,10 @@ func (h *JsonHandler) ProcessChunk(data []byte, atEOF bool) (*ChunkResult, error
 
 	if len(data) > 0 {
 		// forward as binary, without json validation
-		pm := &PubMessage{Data: data}
+		pm := &PubMessage{
+			Data:       data,
+			Attributes: map[string]string{"fmt": "json"},
+		}
 		h.out.Push(defaultQueue, pm)
 
 		// text hanlding

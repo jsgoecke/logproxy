@@ -22,6 +22,7 @@ const (
 	startPortRange = PortNum(iota + 13310)
 	testJson1Port
 	testJson2Port
+	testEventPPort
 	testLogPort
 	testFluentPort
 	testSyslogPort
@@ -133,6 +134,33 @@ func writeJson(t *testing.T, delim string, pserver *ProtocolServer) {
 	assert.Equal(t, 0, metricInt(pserver.inErrors), "json errors")
 }
 
+func writeEventP(t *testing.T, pserver *ProtocolServer) {
+
+	data := []byte{
+		3, 23, 0, 5 /* 5 byte msg */, 1, 2, 3, 4, 5,
+		3, 23, 0, 2 /* 2 byte msg */, 1, 2,
+	}
+
+	tcpConn, err := net.DialTCP("tcp", nil,
+		&net.TCPAddr{IP: []byte{127, 0, 0, 1}, Port: int(testEventPPort)})
+	if err != nil {
+		t.FailNow()
+	}
+	tcpConn.SetNoDelay(true)
+
+	tcpConn.Write(data)
+	tcpConn.Close()
+	fmt.Printf("Wrote %d bytes, 2 Event messages\n", len(data))
+
+	// give reader a chance to see it
+	time.Sleep(100 * time.Millisecond)
+
+	assert.Equal(t, len(data), metricInt(pserver.inBytes), "eventp bytes written")
+	assert.Equal(t, 2, metricInt(pserver.inMsgs), "eventp msgs written")
+	assert.Equal(t, 1, int(pserver.connCount), "eventp connections")
+	assert.Equal(t, 0, metricInt(pserver.inErrors), "eventp errors")
+}
+
 func testFluent(t *testing.T, pserver *ProtocolServer) {
 
 	cfg := pserver.cfg
@@ -231,6 +259,7 @@ func TestProtocols(t *testing.T) {
 		Protocols: []ProtocolConfig{
 			{Type: "json", Name: "json1", Enable: true, Host: "127.0.0.1", Port: int(testJson1Port)},
 			{Type: "json", Name: "json2", Enable: true, Host: "127.0.0.1", Port: int(testJson2Port)},
+			{Type: "eventp", Enable: true, Host: "127.0.0.1", Port: int(testEventPPort)},
 			{Type: "log", Enable: true, Host: "127.0.0.1", Port: int(testLogPort)},
 			{Type: "fluent", Enable: true, Host: "127.0.0.1", Port: int(testFluentPort)},
 			{Type: "syslog", Enable: true, Host: "127.0.0.1", Port: int(testSyslogPort)},
@@ -252,9 +281,10 @@ func TestProtocols(t *testing.T) {
 
 	t.Run("proto-json-1", func(t *testing.T) { writeJson(t, "null", server.pservers[0]) })
 	t.Run("proto-json-2", func(t *testing.T) { writeJson(t, "newline", server.pservers[1]) })
+	t.Run("proto-eventp", func(t *testing.T) { writeEventP(t, server.pservers[2]) })
 
-	t.Run("proto-log", func(t *testing.T) { writeLines(t, server.pservers[2]) })
-	t.Run("proto-fluent", func(t *testing.T) { testFluent(t, server.pservers[3]) })
+	t.Run("proto-log", func(t *testing.T) { writeLines(t, server.pservers[3]) })
+	t.Run("proto-fluent", func(t *testing.T) { testFluent(t, server.pservers[4]) })
 	t.Run("promhttp", func(t *testing.T) { testMetrics(t, cfg, "") })
 
 	server.Shutdown()
